@@ -3,6 +3,7 @@ import { GiftRequestModel } from "../Schemas/GiftRequestSchema";
 import { Types } from "mongoose";
 import { sendApprovalEmail } from "../services/emailService";
 import { Gift } from "../Schemas/GiftSchema";
+import { UserModel } from "../Schemas/UserSchema";
 
 const router = Router();
 
@@ -71,7 +72,7 @@ router.post("/request", async (req: Request, res: Response) => {
     });
 
     // Send initial approval emails
-    await sendApprovalEmail(newRequest, 1);
+    await sendApprovalEmail(newRequest);
 
     res.status(201).json(newRequest);
   } catch (error) {
@@ -84,23 +85,32 @@ router.post("/request", async (req: Request, res: Response) => {
 router.patch("/requests/:id/approve", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { approverId, approvalLevel } = req.body;
+    const { approverId } = req.body;
 
     const request = await GiftRequestModel.findById(id);
     if (!request) {
       res.status(404).json({ message: "Request not found" });
       return;
     }
-    /*
+    const user = await UserModel.findById(approverId);
+    if (!user) {
+      res.status(404).json({ message: "Approver not found" });
+      return;
+    }
+
     // Update specific approval level
+    const approvalLevel = getApprovalLevel(user.role);
     const approvalIndex = request.approvals.findIndex(
-      (a) => a.level === approvalLevel
+      (a) => a.level <= approvalLevel
     );
     if (approvalIndex === -1) {
       res.status(400).json({ message: "Invalid approval level" });
       return;
-    }*/
-    const approvalIndex = 0;
+    }
+    console.log(
+      `${request.approvals.length} === ${approvalLevel}`,
+      request.approvals.length === approvalLevel
+    );
     const updateResult = await GiftRequestModel.findByIdAndUpdate(
       id,
       {
@@ -110,8 +120,8 @@ router.patch("/requests/:id/approve", async (req: Request, res: Response) => {
             approverId
           ),
           [`approvals.${approvalIndex}.approvedAt`]: new Date(),
-          currentStatus: "APPROVED"
-            // request.approvals.length === approvalLevel ? "APPROVED" : "PENDING",
+          currentStatus:
+            request.approvals.length <= approvalLevel ? "APPROVED" : "PENDING",
         },
       },
       { new: true, runValidators: true }
@@ -123,9 +133,31 @@ router.patch("/requests/:id/approve", async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to process approval" });
   }
 });
-
+// Helper functions
 function isValidObjectId(id: string): boolean {
   return /^[0-9a-fA-F]{24}$/.test(id);
+}
+
+function getRequiredLevel(giftType: string): number {
+  switch (giftType) {
+    case "normal":
+      return 1;
+    case "vip":
+      return 2;
+    default:
+      return -1;
+  }
+}
+
+function getApprovalLevel(userRole: string): number {
+  switch (userRole) {
+    case "department_head":
+      return 1;
+    case "cpro_department_admin":
+      return 2;
+    default:
+      return -1;
+  }
 }
 
 export default router;

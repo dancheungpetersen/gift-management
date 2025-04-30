@@ -5,10 +5,8 @@ import { UserModel } from "../Schemas/UserSchema"; // Import User model
 
 // Configure transporter
 const transporter = nodemailer.createTransport({
-  service: process.env.EMAIL_SERVICE,
   host: process.env.EMAIL_HOST,
   port: Number(process.env.EMAIL_PORT),
-  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD,
@@ -16,19 +14,18 @@ const transporter = nodemailer.createTransport({
 });
 
 export const sendApprovalEmail = async (
-  request: IGiftRequest,
-  level: number
+  request: IGiftRequest
 ) => {
   try {
-    const role = level === 1 ? "department_head" : "cpro_department_admin";
+    const role = request.giftType === "vip" ? "cpro_department_admin" : "department_head";
     const approvers = await UserModel.find({ role }).lean().exec();
 
-    /*for (const approver of approvers) {
-      await transporter.sendMail({
+    for (const approver of approvers) {
+      const payload = {
         from: `"Gift System" <${process.env.EMAIL_FROM}>`,
-        //to: approver.email,
-        to: 'dan@babywise.dk',
-        subject: `Approval Required (Level ${level}) - ${request.giftId}`,
+        to: approver.email,
+        //to: "dan@babywise.dk",
+        subject: `Approval Required (Level ${request.giftType}) - ${request.giftId}`,
         html: `
           <p>Please review gift request:</p>
           <ul>
@@ -39,8 +36,10 @@ export const sendApprovalEmail = async (
           </ul>
           <p><a href="${process.env.APP_URL}/approvals/${request._id}">Review Request</a></p>
         `,
-      });
-    }*/
+      };
+      console.log(`Sending email to ${approver.email}`, payload);
+      //await transporter.sendMail(payload);
+    }
   } catch (error) {
     console.error("Error sending approval emails:", error);
     throw new Error("Failed to send approval emails");
